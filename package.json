@@ -40,5 +40,8 @@
     "3mf"
   ],
   "author": "Your Name",
-  "license": "MIT"
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0 <22.0.0"
+  }
 }

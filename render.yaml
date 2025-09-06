@@ -3,6 +3,7 @@ services:
     name: svg-to-3d-api
     env: node
     plan: free
+    nodeVersion: 20
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /health
