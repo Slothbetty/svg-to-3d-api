@@ -5,8 +5,8 @@
   "main": "src/server.js",
   "type": "module",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "nodemon src/server.js",
+    "start": "node --max-old-space-size=2048 src/server.js",
+    "dev": "nodemon --max-old-space-size=2048 src/server.js",
     "build": "echo 'No build step required'",
     "test": "jest",
     "deploy": "npm run build && npm start"

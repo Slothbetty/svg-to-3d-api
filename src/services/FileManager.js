@@ -59,14 +59,14 @@ export class FileManager {
     // Save file to disk
     fs.writeFileSync(filePath, buffer);
     
-    // Store file metadata in memory
+    // Store file metadata in memory (without the buffer to save memory)
     this.files.set(fileId, {
       fileId,
       filePath,
       format,
       fileName: `${fileName}.${format}`,
       mimeType: this.getMimeType(format),
-      buffer,
+      fileSize: buffer.length,
       createdAt: timestamp,
       expiresAt: timestamp + this.maxFileAge
     });
@@ -99,14 +99,23 @@ export class FileManager {
       return null;
     }
 
-    return {
-      buffer: fileData.buffer,
-      format: fileData.format,
-      fileName: fileData.fileName,
-      mimeType: fileData.mimeType,
-      createdAt: fileData.createdAt,
-      expiresAt: fileData.expiresAt
-    };
+    try {
+      // Read file from disk instead of keeping in memory
+      const buffer = fs.readFileSync(fileData.filePath);
+      
+      return {
+        buffer,
+        format: fileData.format,
+        fileName: fileData.fileName,
+        mimeType: fileData.mimeType,
+        createdAt: fileData.createdAt,
+        expiresAt: fileData.expiresAt
+      };
+    } catch (error) {
+      console.error(`Error reading file ${fileId}:`, error.message);
+      this.deleteFile(fileId);
+      return null;
+    }
   }
 
   /**
@@ -189,7 +198,7 @@ export class FileManager {
     let expiredCount = 0;
     
     for (const fileData of this.files.values()) {
-      totalSize += fileData.buffer.length;
+      totalSize += fileData.fileSize || 0;
       if (now > fileData.expiresAt) {
         expiredCount++;
       }

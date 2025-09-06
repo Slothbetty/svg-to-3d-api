@@ -44,9 +44,12 @@ export class SvgTo3DConverter {
       drawStrokes = false
     } = options;
 
+    let shapes = null;
+    let modelGroup = null;
+
     try {
       // Parse SVG and create shapes
-      const shapes = this.createShapesFromSvg(svgData, {
+      shapes = this.createShapesFromSvg(svgData, {
         defaultColor,
         defaultDepth: depth,
         drawFillShapes,
@@ -58,7 +61,7 @@ export class SvgTo3DConverter {
       }
 
       // Create 3D model group
-      const modelGroup = this.create3DModel(shapes, {
+      modelGroup = this.create3DModel(shapes, {
         depth,
         size,
         curveSegments
@@ -71,6 +74,9 @@ export class SvgTo3DConverter {
 
     } catch (error) {
       throw new Error(`Failed to convert SVG to 3D: ${error.message}`);
+    } finally {
+      // Clean up memory to prevent leaks
+      this.cleanupMemory(shapes, modelGroup);
     }
   }
 
@@ -361,5 +367,47 @@ export class SvgTo3DConverter {
       && svgEnd !== -1
       && svgStart < svgEnd
       && (lowerCode.includes('viewbox') || lowerCode.includes('width') || lowerCode.includes('height'));
+  }
+
+  /**
+   * Clean up memory by disposing Three.js objects
+   * @param {Array} shapes - Array of shape objects
+   * @param {Group} modelGroup - Three.js Group object
+   */
+  cleanupMemory(shapes, modelGroup) {
+    try {
+      // Dispose of shapes if they exist
+      if (shapes && Array.isArray(shapes)) {
+        shapes.forEach(shapeData => {
+          if (shapeData.shape && shapeData.shape.dispose) {
+            shapeData.shape.dispose();
+          }
+        });
+      }
+
+      // Dispose of 3D model group and its children
+      if (modelGroup) {
+        modelGroup.traverse((child) => {
+          if (child.geometry) {
+            child.geometry.dispose();
+          }
+          if (child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach(material => material.dispose());
+            } else {
+              child.material.dispose();
+            }
+          }
+        });
+        modelGroup.clear();
+      }
+
+      // Force garbage collection if available
+      if (global.gc) {
+        global.gc();
+      }
+    } catch (error) {
+      console.warn('Error during memory cleanup:', error.message);
+    }
   }
 }
