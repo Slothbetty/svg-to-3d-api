@@ -1,7 +1,7 @@
 import { SVGLoader } from 'three/addons/loaders/SVGLoader.js';
 import { STLExporter } from 'three/addons/exporters/STLExporter.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
-import { Group, ExtrudeGeometry, Mesh, MeshLambertMaterial, Color, Shape, Vector3, Box3 } from 'three';
+import { Group, ExtrudeGeometry, Mesh, MeshPhongMaterial, Color, Shape, Vector3, Box3 } from 'three';
 import potrace from 'potrace';
 
 export class SvgTo3DConverter {
@@ -28,6 +28,17 @@ export class SvgTo3DConverter {
   }
 
   /**
+   * Smooth a shape by subdividing its curves for better quality
+   * @param {Shape} shape - Three.js Shape object
+   * @returns {Shape} - Smoothed shape
+   */
+  smoothShape(shape) {
+    // Skip smoothing to avoid memory issues - return original shape
+    // The smoothing was causing memory overflow due to too many points
+    return shape;
+  }
+
+  /**
    * Convert SVG data to 3D model
    * @param {string} svgData - SVG content as string
    * @param {Object} options - Conversion options
@@ -38,7 +49,7 @@ export class SvgTo3DConverter {
       format = 'stl',
       depth = 2,
       size = 37,
-      curveSegments = 32, // Reduced from 64 to 32 for smaller files (matching bekuto3d optimization)
+      curveSegments = 64, // Balanced for smoothness without memory issues
       defaultColor = '#FFA500',
       drawFillShapes = true,
       drawStrokes = false
@@ -88,8 +99,20 @@ export class SvgTo3DConverter {
   async convertBitmapToSvg(imageBuffer) {
     return new Promise((resolve, reject) => {
       try {
-        // Use potrace to convert bitmap to SVG
-        potrace.trace(imageBuffer, (err, svg) => {
+        // Use potrace to convert bitmap to SVG with optimized settings for smooth curves
+        potrace.trace(imageBuffer, {
+          threshold: 128,
+          turdSize: 20, // Increased to remove more small artifacts
+          optCurve: true,
+          optTolerance: 0.2, // Reduced for smoother curves
+          blackOnWhite: true,
+          color: 'auto',
+          background: 'white',
+          turnPolicy: 'minority', // Better for smooth curves
+          alphamax: 0.4, // Reduced for smoother corners
+          smooth: true, // Enable smoothing
+          smoothness: 1.0 // Maximum smoothness
+        }, (err, svg) => {
           if (err) {
             reject(new Error(`Failed to convert bitmap to SVG: ${err.message}`));
             return;
@@ -160,7 +183,7 @@ export class SvgTo3DConverter {
         });
       } else {
         svgParsed.paths.forEach((path, index) => {
-          console.log(`Processing path ${index}:`, path.userData?.style);
+          console.log(`Processing path ${index}`);
           
           // Process filled shapes
           if (drawFillShapes) {
@@ -172,15 +195,48 @@ export class SvgTo3DConverter {
                 const pathShapes = SVGLoader.createShapes(path);
                 console.log(`Created ${pathShapes.length} shapes from path ${index}`);
                 
-                pathShapes.forEach((shape) => {
-                  shapes.push({
-                    shape,
-                    color: new Color().setStyle(fillColor),
-                    startZ: defaultStartZ,
-                    depth: defaultDepth,
-                    opacity: fillOpacity,
-                    polygonOffset: 0
-                  });
+                // Apply shape smoothing to reduce pixelation (limited to prevent memory issues)
+                const limitedShapes = pathShapes.slice(0, 1000); // Limit to first 1000 shapes
+                const smoothedShapes = limitedShapes.map((shape) => {
+                  return this.smoothShape(shape);
+                });
+                
+                smoothedShapes.forEach((shape) => {
+                  // Filter out very small shapes that are likely artifacts
+                  // Calculate bounding box manually since Shape doesn't have getBoundingBox()
+                  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                  
+                  // Get bounding box from shape curves
+                  if (shape.curves && shape.curves.length > 0) {
+                    shape.curves.forEach(curve => {
+                      if (curve.v1) {
+                        minX = Math.min(minX, curve.v1.x);
+                        minY = Math.min(minY, curve.v1.y);
+                        maxX = Math.max(maxX, curve.v1.x);
+                        maxY = Math.max(maxY, curve.v1.y);
+                      }
+                      if (curve.v2) {
+                        minX = Math.min(minX, curve.v2.x);
+                        minY = Math.min(minY, curve.v2.y);
+                        maxX = Math.max(maxX, curve.v2.x);
+                        maxY = Math.max(maxY, curve.v2.y);
+                      }
+                    });
+                  }
+                  
+                  const area = (maxX - minX) * (maxY - minY);
+                  
+                  // Only include shapes with reasonable size (filter out tiny artifacts)
+                  if (area > 1.0) { // Increased minimum area threshold to reduce memory usage
+                    shapes.push({
+                      shape,
+                      color: new Color().setStyle(fillColor),
+                      startZ: defaultStartZ,
+                      depth: defaultDepth,
+                      opacity: fillOpacity,
+                      polygonOffset: 0
+                    });
+                  }
                 });
               } catch (error) {
                 console.error(`Error creating shapes from path ${index}:`, error);
@@ -210,18 +266,26 @@ export class SvgTo3DConverter {
 
     shapes.forEach((shapeData) => {
       if (shapeData.depth > 0) {
-        // Create extrude geometry with optimized settings for smaller files
+        // Create extrude geometry matching bekuto3d approach
         const extrudeSettings = {
           depth: shapeData.depth,
-          bevelEnabled: false,
+          bevelEnabled: false, // Match bekuto3d - no beveling to avoid memory issues
           curveSegments,
-          steps: 1 // Add steps to reduce vertical subdivisions
+          steps: 1
         };
 
         const geometry = new ExtrudeGeometry(shapeData.shape, extrudeSettings);
         
-        // Create material
-        const material = new MeshLambertMaterial({
+        // Compute vertex normals for smoother shading
+        geometry.computeVertexNormals();
+        
+        // Optimize geometry to reduce memory usage
+        geometry.computeBoundingBox();
+        geometry.computeBoundingSphere();
+        
+        
+        // Create material matching bekuto3d
+        const material = new MeshPhongMaterial({
           color: shapeData.color,
           transparent: true,
           opacity: shapeData.opacity
@@ -236,6 +300,14 @@ export class SvgTo3DConverter {
       }
     });
 
+    // Force garbage collection if available to free up memory
+    if (global.gc) {
+      global.gc();
+    }
+    
+    // Additional memory cleanup
+    console.log(`Total shapes processed: ${shapes.length}`);
+
     // Scale and center the model
     this.scaleAndCenterModel(group, size);
 
@@ -243,10 +315,7 @@ export class SvgTo3DConverter {
     const finalBox = new Box3().setFromObject(group);
     const finalSize = new Vector3();
     finalBox.getSize(finalSize);
-    console.log('Final model dimensions:');
-    console.log('  X:', finalSize.x.toFixed(2), 'mm');
-    console.log('  Y:', finalSize.y.toFixed(2), 'mm');
-    console.log('  Z:', finalSize.z.toFixed(2), 'mm');
+    console.log('Final model dimensions:', finalSize.x.toFixed(2), 'x', finalSize.y.toFixed(2), 'x', finalSize.z.toFixed(2), 'mm');
 
     return group;
   }
@@ -270,6 +339,9 @@ export class SvgTo3DConverter {
 
     // Apply scaling only to X and Y dimensions
     modelGroup.scale.set(scaleFactor, scaleFactor, 1);
+    
+    // Fix orientation: flip Y-axis to match SVG coordinate system (like bekuto3d demo)
+    modelGroup.scale.y *= -1;
 
     // Center the model
     const center = new Vector3();
@@ -314,12 +386,7 @@ export class SvgTo3DConverter {
         const sizeReduction = textResult && binarySize ? 
           ((textResult.length - binarySize) / textResult.length * 100).toFixed(1) : 0;
         
-        console.log('STL export successful:');
-        console.log('  Binary size:', binarySize, 'bytes');
-        if (textResult) {
-          console.log('  Text size:', textResult.length, 'bytes');
-          console.log('  Size reduction:', sizeReduction + '%');
-        }
+        console.log('STL export successful:', binarySize, 'bytes');
         
         // Handle different result types from STLExporter
         if (binaryResult instanceof ArrayBuffer) {

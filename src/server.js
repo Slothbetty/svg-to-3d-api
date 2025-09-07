@@ -134,7 +134,7 @@ app.post('/convert', upload.single('file'), validateSvg, async (req, res, next) 
       format = 'stl', 
       depth = 2, 
       size = 37, 
-      curveSegments = 32, // Reduced default for smaller files
+      curveSegments = 64, // Balanced for smoothness without memory issues
       defaultColor = '#FFA500',
       drawFillShapes = true,
       drawStrokes = false,
