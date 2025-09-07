@@ -239,13 +239,22 @@ export class SvgTo3DConverter {
     // Scale and center the model
     this.scaleAndCenterModel(group, size);
 
+    // Log final dimensions for verification
+    const finalBox = new Box3().setFromObject(group);
+    const finalSize = new Vector3();
+    finalBox.getSize(finalSize);
+    console.log('Final model dimensions:');
+    console.log('  X:', finalSize.x.toFixed(2), 'mm');
+    console.log('  Y:', finalSize.y.toFixed(2), 'mm');
+    console.log('  Z:', finalSize.z.toFixed(2), 'mm');
+
     return group;
   }
 
   /**
-   * Scale and center the 3D model
+   * Scale and center the 3D model (only X and Y dimensions, preserve Z-depth)
    * @param {Group} modelGroup - The 3D model group
-   * @param {number} targetSize - Target size in mm
+   * @param {number} targetSize - Target size in mm for X and Y dimensions
    */
   scaleAndCenterModel(modelGroup, targetSize) {
     if (modelGroup.children.length === 0) return;
@@ -255,17 +264,22 @@ export class SvgTo3DConverter {
     const size = new Vector3();
     box.getSize(size);
 
-    // Calculate scale factor
+    // Calculate scale factor based only on X and Y dimensions (preserve Z-depth)
     const maxDimension = Math.max(size.x, size.y);
     const scaleFactor = targetSize / maxDimension;
 
-    // Apply scaling
-    modelGroup.scale.setScalar(scaleFactor);
+    // Apply scaling only to X and Y dimensions
+    modelGroup.scale.set(scaleFactor, scaleFactor, 1);
 
     // Center the model
     const center = new Vector3();
     box.getCenter(center);
-    modelGroup.position.sub(center.multiplyScalar(scaleFactor));
+    // Only center X and Y, preserve Z positioning
+    modelGroup.position.set(
+      -center.x * scaleFactor,
+      -center.y * scaleFactor,
+      modelGroup.position.z
+    );
   }
 
   /**
