@@ -69,7 +69,7 @@ export const validateSvg = (req, res, next) => {
       if (isNaN(segmentsNum) || segmentsNum < 4 || segmentsNum > 256) {
         return res.status(400).json({
           error: 'Invalid Curve Segments Parameter',
-          message: 'Curve segments must be an integer between 4 and 256.'
+          message: 'Curve segments must be an integer between 4 and 256 (default: 32 for smaller files).'
         });
       }
     }

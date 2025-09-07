@@ -78,7 +78,7 @@ Convert SVG or bitmap image to 3D model and return download URL.
 - `format` (string, optional): Output format (`stl`, `gltf`) - default: `stl`
 - `depth` (number, optional): Extrusion depth in mm (0.1-10) - default: `2`
 - `size` (number, optional): Model size in mm (1-1000) - default: `37`
-- `curveSegments` (number, optional): Curve subdivision level (4-256) - default: `64`
+- `curveSegments` (number, optional): Curve subdivision level (4-256) - default: `32` (optimized for smaller files)
 - `defaultColor` (string, optional): Default color for shapes - default: `#FFA500`
 - `drawFillShapes` (boolean, optional): Process filled shapes - default: `true`
 - `drawStrokes` (boolean, optional): Process stroke outlines - default: `false`

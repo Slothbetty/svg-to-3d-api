@@ -17,7 +17,7 @@ try {
   const shape = pathShapes[0];
   
   const group = new Group();
-  const extrudeSettings = { depth: 2, bevelEnabled: false, curveSegments: 64 };
+  const extrudeSettings = { depth: 2, bevelEnabled: false, curveSegments: 32 }; // Updated for smaller files
   const geometry = new ExtrudeGeometry(shape, extrudeSettings);
   const material = new MeshLambertMaterial({ color: 0xff0000 });
   const mesh = new Mesh(geometry, material);
@@ -31,7 +31,8 @@ try {
   console.log('Testing binary STL export...');
   const binaryResult = exporter.parse(group, { binary: true });
   console.log('Binary result type:', typeof binaryResult);
-  console.log('Binary result length:', binaryResult ? binaryResult.length : 'undefined');
+  console.log('Binary result is ArrayBuffer:', binaryResult instanceof ArrayBuffer);
+  console.log('Binary result length:', binaryResult ? binaryResult.byteLength : 'undefined');
   
   console.log('Testing text STL export...');
   const textResult = exporter.parse(group, { binary: false });

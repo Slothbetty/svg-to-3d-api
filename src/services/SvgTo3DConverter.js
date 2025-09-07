@@ -38,7 +38,7 @@ export class SvgTo3DConverter {
       format = 'stl',
       depth = 2,
       size = 37,
-      curveSegments = 64,
+      curveSegments = 32, // Reduced from 64 to 32 for smaller files (matching bekuto3d optimization)
       defaultColor = '#FFA500',
       drawFillShapes = true,
       drawStrokes = false
@@ -205,16 +205,17 @@ export class SvgTo3DConverter {
    * @returns {Group} - Three.js Group containing the 3D model
    */
   create3DModel(shapes, options = {}) {
-    const { depth = 2, size = 37, curveSegments = 64 } = options;
+    const { depth = 2, size = 37, curveSegments = 32 } = options;
     const group = new Group();
 
     shapes.forEach((shapeData) => {
       if (shapeData.depth > 0) {
-        // Create extrude geometry
+        // Create extrude geometry with optimized settings for smaller files
         const extrudeSettings = {
           depth: shapeData.depth,
           bevelEnabled: false,
-          curveSegments
+          curveSegments,
+          steps: 1 // Add steps to reduce vertical subdivisions
         };
 
         const geometry = new ExtrudeGeometry(shapeData.shape, extrudeSettings);
@@ -286,15 +287,40 @@ export class SvgTo3DConverter {
         if (!modelGroup) return null;
         this.exporters.stl ||= new STLExporter();
         
-        // Use text export for Node.js compatibility
-        const result = this.exporters.stl.parse(modelGroup, { binary: false });
+        // Use binary export for smaller file size (matching bekuto3d approach)
+        const binaryResult = this.exporters.stl.parse(modelGroup, { binary: true });
         
-        if (!result) {
+        if (!binaryResult) {
           throw new Error('STL export failed - no result returned');
         }
         
-        console.log('STL export successful, size:', result.length, 'bytes');
-        return Buffer.from(result, 'utf8');
+        // Optional: Compare with text format for size analysis
+        const textResult = this.exporters.stl.parse(modelGroup, { binary: false });
+        const binarySize = binaryResult ? (binaryResult.byteLength || binaryResult.length) : 0;
+        const sizeReduction = textResult && binarySize ? 
+          ((textResult.length - binarySize) / textResult.length * 100).toFixed(1) : 0;
+        
+        console.log('STL export successful:');
+        console.log('  Binary size:', binarySize, 'bytes');
+        if (textResult) {
+          console.log('  Text size:', textResult.length, 'bytes');
+          console.log('  Size reduction:', sizeReduction + '%');
+        }
+        
+        // Handle different result types from STLExporter
+        if (binaryResult instanceof ArrayBuffer) {
+          return Buffer.from(binaryResult);
+        } else if (binaryResult instanceof DataView) {
+          // Handle DataView (common with binary STL export)
+          return Buffer.from(binaryResult.buffer, binaryResult.byteOffset, binaryResult.byteLength);
+        } else if (typeof binaryResult === 'string') {
+          return Buffer.from(binaryResult, 'utf8');
+        } else if (binaryResult && typeof binaryResult === 'object' && binaryResult.length !== undefined) {
+          // Handle Uint8Array or similar typed array
+          return Buffer.from(binaryResult);
+        } else {
+          throw new Error('Unexpected STL export result type: ' + typeof binaryResult + ', constructor: ' + binaryResult.constructor.name);
+        }
       },
 
       async gltf() {

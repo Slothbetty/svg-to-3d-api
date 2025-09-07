@@ -43,7 +43,7 @@ try {
     const extrudeSettings = {
       depth: shapeData.depth,
       bevelEnabled: false,
-      curveSegments: 64
+      curveSegments: 32 // Updated to match bekuto3d optimization
     };
 
     const geometry = new ExtrudeGeometry(shapeData.shape, extrudeSettings);

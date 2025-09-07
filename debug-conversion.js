@@ -15,7 +15,7 @@ try {
     format: 'stl',
     depth: 2,
     size: 37,
-    curveSegments: 64,
+    curveSegments: 32, // Updated to match bekuto3d optimization
     defaultColor: '#FFA500',
     drawFillShapes: true,
     drawStrokes: false
